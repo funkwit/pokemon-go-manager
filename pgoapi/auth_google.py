@@ -48,6 +48,8 @@ class AuthGoogle(Auth):
                               self.GOOGLE_LOGIN_APP,
                               self.GOOGLE_LOGIN_CLIENT_SIG)
 
+        print login
+
         self._auth_token = login.get('Auth')
 
         if self._auth_token is None:

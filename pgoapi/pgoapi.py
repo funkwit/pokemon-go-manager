@@ -332,6 +332,8 @@ class PGoApi:
         self.download_settings(hash="05daf51635c82611d1aac95c0b051d3ec088a930")
 
         response = self.call()
+        self.init_response = response
+        self.log.info(self.init_response['responses'])
 
         if not response:
             self.log.info('Login failed!')
