@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 from collections import defaultdict
 from time import sleep
 
@@ -7,34 +8,24 @@ from pgoapi import PGoApi
 
 
 CLEANUP_POLL_TIME = 60
+POLL_JITTER = 20
 CP_THRESHOLD_FACTOR = 0.5
 MAX_SIMILAR_POKEMON = 3
 
 EASY_EVOLUTIONS = [ 10, 13, 16 ]
 
+
 credentials = json.load(open('credentials.json'))
-pokemon_names = { int(key): value for key, value in json.load(open("name_id.json")).iteritems() }
-evo_map = json.load(open('evo_map.json'))
+pokemon_names = { int(key): value for key, value in json.load(open('name_id.json')).iteritems() }
+candy_map = { int(key): value for key, value in json.load(open('candy_map.json')).iteritems() }
 
 front_evo_map = defaultdict(list)
 back_evo_map = dict()
-candy_map = dict()
 
-for key, value in evo_map.iteritems():
+for key, value in json.load(open('evo_map.json')).iteritems():
   front_evo_map[value].append(int(key))
   back_evo_map[int(key)] = value
 
-for key, value in json.load(open('candy_map.json')).iteritems():
-  candy_map[int(key)] = value
-
-def get_final_evos(id):
-  if id in front_evo_map:
-    ret = []
-    for evo in front_evo_map[id]:
-      ret += get_final_evos(evo)
-    return ret
-  else:
-    return [ id ]
 
 def get_all_evos(id):
   if id in front_evo_map:
@@ -45,17 +36,6 @@ def get_all_evos(id):
   else:
     return [ id ]
 
-def get_family_id(id):
-  if id in back_evo_map:
-    return get_family_id(int(back_evo_map[id]))
-  else:
-    return id
-
-def get_evo_tree(id):
-  if id in front_evo_map:
-    return ( id, [ get_evo_tree(evo) for evo in front_evo_map[id] ] )
-  else:
-    return ( id, [] )
 
 def candy_for_final(id):
   if id in candy_map:
@@ -66,34 +46,37 @@ def candy_for_final(id):
 
 def setup_logging():
   logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(module)10s] [%(levelname)5s] %(message)s')
-  logging.getLogger("requests").setLevel(logging.INFO)
-  logging.getLogger("pgoapi").setLevel(logging.INFO)
-  logging.getLogger("rpc_api").setLevel(logging.INFO)
+  logging.getLogger('requests').setLevel(logging.INFO)
+  logging.getLogger('pgoapi').setLevel(logging.INFO)
+  logging.getLogger('rpc_api').setLevel(logging.INFO)
+
 
 def main():
 
   setup_logging()
-
   api = PGoApi({}, pokemon_names)
-  if not api.login('google', **credentials):
-    return
 
-  clean_up_inventory(api)
+  while not api.login('google', **credentials):
+    pass
 
+  while True:
+    clean_up_inventory(api)
+    sleep(CLEANUP_POLL_TIME + random.uniform(-1, 1) * POLL_JITTER)
 
 
 def clean_up_inventory(api):
   """
-  - Transfers weakest pokemon by CP
-    - Measures weakness based on highest CP Pokemon
-    - Limits maximum amount of similar pokemon
   - Stars pokemon which are ready to evolve
     - Stars a pokemon when you haven't got its evolution yet
     - If you have all of a pokemon's evolutions, then wait until you can evolve the first pokemon to the last evolution
     - If the pokemon is an "EASY_EVOLUTION", then star when the first evolution is ready
+  - Transfers weakest pokemon by CP
+    - Measures weakness based on highest CP Pokemon
+    - Limits maximum amount of similar pokemon
   """
 
-  inventory_items = api.get_inventory().call()['responses']['GET_INVENTORY']['inventory_delta']['inventory_items']
+  response = api.get_inventory().call()['responses']['GET_INVENTORY']
+  inventory_items = response['inventory_delta']['inventory_items']
   caught_pokemon = defaultdict(list)
   candies = defaultdict(int)
   pokemon_by_id = dict()
@@ -101,20 +84,20 @@ def clean_up_inventory(api):
   for inventory_item in inventory_items:
     data = inventory_item['inventory_item_data']
 
-    if "pokemon_data" in data:
+    if 'pokemon_data' in data:
       # Is pokemon
       pokemon = data['pokemon_data']
       if 'cp' in pokemon:
-        caught_pokemon[pokemon["pokemon_id"]].append(pokemon)
+        caught_pokemon[pokemon['pokemon_id']].append(pokemon)
         pokemon_by_id[pokemon['id']] = pokemon
       else:
         # It's an egg
         pass
 
-    elif "pokemon_family" in data:
+    elif 'pokemon_family' in data:
       # Is candy
-      family = data["pokemon_family"]
-      candies[family["family_id"]] += family.get('candy', 0)
+      family = data['pokemon_family']
+      candies[family['family_id']] += family.get('candy', 0)
 
     else:
       # Ignore
@@ -166,7 +149,7 @@ def clean_up_inventory(api):
   for id in to_evolve:
     pokemon = pokemon_by_id[id]
     evolution_counts[pokemon['pokemon_id']] += 1
-    api.log.info("%s (CP %s)" % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
+    api.log.info('%s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
 
   # Assign favourites accordingly
   for id, pokemon in pokemon_by_id.iteritems():
@@ -183,7 +166,7 @@ def clean_up_inventory(api):
     for index, pokemon in enumerate(pokemons):
       if pokemon['id'] in to_evolve: continue
       if pokemon['cp'] < cp_threshold or index >= max_pokemon:
-        api.log.info("Grinding up %s (CP %s)" % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
+        api.log.info('Grinding up %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
         api.release_pokemon(pokemon_id=pokemon['id']).call()
 
   
