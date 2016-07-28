@@ -11,6 +11,7 @@ CLEANUP_POLL_TIME = 60
 POLL_JITTER = 20
 CP_THRESHOLD_FACTOR = 0.5
 MAX_SIMILAR_POKEMON = 3
+MIN_SIMILAR_POKEMON = 1
 
 EASY_EVOLUTIONS = [ 10, 13, 16 ]
 
@@ -162,9 +163,10 @@ def clean_up_inventory(api):
     max_cp = pokemons[0]['cp']
     cp_threshold = max_cp * CP_THRESHOLD_FACTOR
     max_pokemon = MAX_SIMILAR_POKEMON + evolution_counts[id]
+    min_pokemon = MIN_SIMILAR_POKEMON + evolution_counts[id]
 
     for index, pokemon in enumerate(pokemons):
-      if pokemon['id'] in to_evolve: continue
+      if pokemon['id'] in to_evolve or index < min_pokemon: continue
       if pokemon['cp'] < cp_threshold or index >= max_pokemon:
         api.log.info('Grinding up %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
         api.release_pokemon(pokemon_id=pokemon['id']).call()
