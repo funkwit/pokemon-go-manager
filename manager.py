@@ -57,7 +57,7 @@ def main():
   setup_logging()
   api = PGoApi({}, pokemon_names)
 
-  while not api.login('google', **credentials):
+  while not api.login(**credentials):
     pass
 
   while True:
