@@ -7,22 +7,19 @@ from time import sleep
 from pgoapi import PGoApi
 
 
-CLEANUP_POLL_TIME = 60
-POLL_JITTER = 20
-CP_THRESHOLD_FACTOR = 0.5
-MAX_SIMILAR_POKEMON = 3
-MIN_SIMILAR_POKEMON = 1
-
-EASY_EVOLUTIONS = [ 10, 13, 16 ]
+# Load configuration parameters
+class CONFIG(object): pass
+for key, value in json.load(open('params.json')).iteritems():
+  setattr(CONFIG, key, value)
 
 
+# Load resources
 credentials = json.load(open('credentials.json'))
 pokemon_names = { int(key): value for key, value in json.load(open('name_id.json')).iteritems() }
 candy_map = { int(key): value for key, value in json.load(open('candy_map.json')).iteritems() }
 
 front_evo_map = defaultdict(list)
 back_evo_map = dict()
-
 for key, value in json.load(open('evo_map.json')).iteritems():
   front_evo_map[value].append(int(key))
   back_evo_map[int(key)] = value
@@ -58,11 +55,11 @@ def main():
   api = PGoApi({}, pokemon_names)
 
   while not api.login(**credentials):
-    pass
+    sleep(2)
 
   while True:
     clean_up_inventory(api)
-    sleep(CLEANUP_POLL_TIME + random.uniform(-1, 1) * POLL_JITTER)
+    sleep(CONFIG.CLEANUP_POLL_TIME + random.uniform(-1, 1) * CONFIG.POLL_JITTER)
 
 
 def clean_up_inventory(api):
@@ -136,7 +133,7 @@ def clean_up_inventory(api):
         candies[family_id] -= candy_req
   
     # Star pokemon that should be farmed for evolution XP
-    if family_id in EASY_EVOLUTIONS:
+    if family_id in CONFIG.EASY_EVOLUTIONS:
       candy_req = candy_map[family_id]
       for pokemon in caught_pokemon[family_id]:
         if pokemon['id'] in to_evolve: continue
@@ -161,9 +158,9 @@ def clean_up_inventory(api):
   for id, pokemons in caught_pokemon.iteritems():
     if len(pokemons) == 0: continue
     max_cp = pokemons[0]['cp']
-    cp_threshold = max_cp * CP_THRESHOLD_FACTOR
-    max_pokemon = MAX_SIMILAR_POKEMON + evolution_counts[id]
-    min_pokemon = MIN_SIMILAR_POKEMON + evolution_counts[id]
+    cp_threshold = max_cp * CONFIG.CP_THRESHOLD_FACTOR
+    max_pokemon = CONFIG.MAX_SIMILAR_POKEMON + evolution_counts[id]
+    min_pokemon = CONFIG.MIN_SIMILAR_POKEMON + evolution_counts[id]
 
     for index, pokemon in enumerate(pokemons):
       if pokemon['id'] in to_evolve or index < min_pokemon: continue

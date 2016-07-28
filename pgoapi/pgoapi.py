@@ -355,6 +355,7 @@ class PGoApi:
             self.log.debug('Setting API endpoint to: %s', self._api_endpoint)
         else:
             self.log.error('Login failed - unexpected server response!')
+            self.log.error(response)
             return False
 
         if 'auth_ticket' in response:
