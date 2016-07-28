@@ -119,10 +119,10 @@ def clean_up_inventory(api):
 
       pre = back_evo_map.get(evo)
       if pre in caught_pokemon and candy_map[pre] <= candies[family_id]:
-        candies[family_id] -= candy_map[pre]
         for pokemon in caught_pokemon[pre]:
           if pokemon['id'] not in to_evolve:
             to_evolve.add(pokemon['id'])
+            candies[family_id] -= candy_map[pre]
             break
 
     # Star base pokemon which can evolve to their final form
