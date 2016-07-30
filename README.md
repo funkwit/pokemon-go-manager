@@ -18,10 +18,12 @@ Niantic may ban you. I haven't been banned yet, but you never know.
     * It isn't the last Pokemon you have of that type (excluding evolutions), and
     * You have more than 3 of the same type of Pokemon (excluding evolutions), or
     * The Pokemon has less than half the CP of the strongest Pokemon you have of that type
+* Automatically discard items that you don't want
+    * Ensures that there's always a configurable buffer of empty space in your inventory
+    * Retain items in configurable proportions, depending on your play style
 
 ## Future Features
 
-* Manage your items so that you can keep spinning those Pokestops uninterrupted.
 * Automatically evolve Pokemon when you drop a Lucky Egg.
 * Automatically heal Pokemon with potions when damaged.
 

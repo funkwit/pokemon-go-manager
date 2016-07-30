@@ -12,6 +12,19 @@ class CONFIG(object): pass
 for key, value in json.load(open('params.json')).iteritems():
   setattr(CONFIG, key, value)
 
+POKEBALL_FAMILY = 0
+POTION_FAMILY = 1
+REVIVE_FAMILY = 2
+BERRY_FAMILY = 7
+
+TOTAL_PROPORTION = CONFIG.POKEBALL_PROPORTION + CONFIG.BERRY_PROPORTION + CONFIG.POTION_PROPORTION + CONFIG.REVIVE_PROPORTION
+ITEM_FAMILY_RATIOS = {
+  POKEBALL_FAMILY: CONFIG.POKEBALL_PROPORTION/TOTAL_PROPORTION,
+  POTION_FAMILY: CONFIG.POTION_PROPORTION/TOTAL_PROPORTION,
+  REVIVE_FAMILY: CONFIG.REVIVE_PROPORTION/TOTAL_PROPORTION,
+  BERRY_FAMILY: CONFIG.BERRY_PROPORTION/TOTAL_PROPORTION,
+}
+
 
 # Load resources
 credentials = json.load(open('credentials.json'))
@@ -40,6 +53,9 @@ def candy_for_final(id):
     return candy_map[id] + candy_for_final(front_evo_map[id][0])
   else:
     return 0
+
+def get_item_family(item_id):
+  return (item_id-1)/100
 
 
 def setup_logging():
@@ -73,11 +89,15 @@ def clean_up_inventory(api):
     - Limits maximum amount of similar pokemon
   """
 
+  player_data = api.get_player().call()['responses']['GET_PLAYER']['player_data']
+
+  # Grab the inventory response and fill some data structures with required information
   response = api.get_inventory().call()['responses']['GET_INVENTORY']
   inventory_items = response['inventory_delta']['inventory_items']
   caught_pokemon = defaultdict(list)
   candies = defaultdict(int)
   pokemon_by_id = dict()
+  item_counts = dict()
 
   for inventory_item in inventory_items:
     data = inventory_item['inventory_item_data']
@@ -97,12 +117,26 @@ def clean_up_inventory(api):
       family = data['pokemon_family']
       candies[family['family_id']] += family.get('candy', 0)
 
+    elif 'item' in data:
+      # It's an item
+      item = data['item']
+      item_counts[item['item_id']] = item.get('count', 0)
+
     else:
       # Ignore
       pass
 
+  # Sort caught pokemon by CP
   for pokemon_id in caught_pokemon:
     caught_pokemon[pokemon_id].sort(key=lambda p: p['cp'], reverse=True)
+
+  # Count items
+  item_counts[801] = 1 # You always have 1 camera, but it doesn't show up
+  total_items = 0
+  item_family_counts = defaultdict(int)
+  for item_id, count in item_counts.iteritems():
+    total_items += count
+    item_family_counts[get_item_family(item_id)] += count
 
   to_evolve = set()
 
@@ -141,32 +175,58 @@ def clean_up_inventory(api):
         to_evolve.add(pokemon['id'])
         candies[family_id] -= candy_req
   
+  # Count pending evolutions per pokemon type
   evolution_counts = defaultdict(int)
-
-  api.log.info('To evolve:')
   for id in to_evolve:
     pokemon = pokemon_by_id[id]
     evolution_counts[pokemon['pokemon_id']] += 1
-    api.log.info('%s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
+
+  # Drop unncecessary items
+  if CONFIG.ENABLE_DISCARD_ITEMS:
+
+    to_discard =  total_items + CONFIG.ITEM_BUFFER - player_data['max_item_storage']
+    if to_discard > 0:
+
+      # Calculate which items are in excess based on ideal ratios
+      undiscardable_count = total_items - sum( item_family_counts[id] for id in ITEM_FAMILY_RATIOS )
+      ideal_count = player_data['max_item_storage'] - CONFIG.ITEM_BUFFER - undiscardable_count
+      ideals = { id: ratio * ideal_count for id, ratio in ITEM_FAMILY_RATIOS.iteritems() }
+      excess = { id: item_family_counts[id] - ideals[id] for id in ITEM_FAMILY_RATIOS if item_family_counts[id] - ideals[id] > 0 }
+      excess_total = sum( count for id, count in excess.iteritems() )
+      discard_counts = { id: int(0.5 + count/excess_total*to_discard) for id, count in excess.iteritems() }
+
+      # Perform discards, starting with worst items first
+      for id, discard_count in discard_counts.iteritems():
+        item_id = id*100 + 1
+        while discard_count > 0:
+          current_count = min(discard_count, item_counts[item_id])
+          api.log.info('Discarding %s of item %s' % (current_count, item_id))
+          self.recycle_inventory_item(item_id=item_id, count=current_count).call()
+          discard_count -= current_count
+          item_id += 1
+
 
   # Assign favourites accordingly
-  for id, pokemon in pokemon_by_id.iteritems():
-    if (id in to_evolve) != ('favorite' in pokemon):
-      api.set_favorite_pokemon(pokemon_id=id, is_favorite=(id in to_evolve)).call()
+  if CONFIG.ENABLE_STAR_EVOLUTIONS:
+    for id, pokemon in pokemon_by_id.iteritems():
+      if (id in to_evolve) != ('favorite' in pokemon):
+        api.log.info('Starring %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
+        api.set_favorite_pokemon(pokemon_id=id, is_favorite=(id in to_evolve)).call()
 
-  # Turn low CP pokemon into candy, and keep no more than MAX_SIMILAR_POKEMON of each type
-  for id, pokemons in caught_pokemon.iteritems():
-    if len(pokemons) == 0: continue
-    max_cp = pokemons[0]['cp']
-    cp_threshold = max_cp * CONFIG.CP_THRESHOLD_FACTOR
-    max_pokemon = CONFIG.MAX_SIMILAR_POKEMON + evolution_counts[id]
-    min_pokemon = CONFIG.MIN_SIMILAR_POKEMON + evolution_counts[id]
+  if CONFIG.ENABLE_TRANSFER_POKEMON:
+    # Turn low CP pokemon into candy, and keep no more than MAX_SIMILAR_POKEMON of each type
+    for id, pokemons in caught_pokemon.iteritems():
+      if len(pokemons) == 0: continue
+      max_cp = pokemons[0]['cp']
+      cp_threshold = max_cp * CONFIG.CP_THRESHOLD_FACTOR
+      max_pokemon = CONFIG.MAX_SIMILAR_POKEMON + evolution_counts[id]
+      min_pokemon = CONFIG.MIN_SIMILAR_POKEMON + evolution_counts[id]
 
-    for index, pokemon in enumerate(pokemons):
-      if pokemon['id'] in to_evolve or index < min_pokemon: continue
-      if pokemon['cp'] < cp_threshold or index >= max_pokemon:
-        api.log.info('Grinding up %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
-        api.release_pokemon(pokemon_id=pokemon['id']).call()
+      for index, pokemon in enumerate(pokemons):
+        if pokemon['id'] in to_evolve or index < min_pokemon: continue
+        if pokemon['cp'] < cp_threshold or index >= max_pokemon:
+          api.log.info('Grinding up %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
+          api.release_pokemon(pokemon_id=pokemon['id']).call()
 
   
 if __name__ == '__main__':
