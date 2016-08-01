@@ -201,7 +201,7 @@ def clean_up_inventory(api):
         while discard_count > 0:
           current_count = min(discard_count, item_counts[item_id])
           api.log.info('Discarding %s of item %s' % (current_count, item_id))
-          self.recycle_inventory_item(item_id=item_id, count=current_count).call()
+          api.recycle_inventory_item(item_id=item_id, count=current_count).call()
           discard_count -= current_count
           item_id += 1
 
