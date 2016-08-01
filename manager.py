@@ -68,7 +68,9 @@ def setup_logging():
 def main():
 
   setup_logging()
-  api = PGoApi({}, pokemon_names)
+  api = PGoApi()
+
+  api.set_position(*CONFIG.STARTING_POSITION)
 
   while not api.login(**credentials):
     sleep(2)
@@ -89,10 +91,10 @@ def clean_up_inventory(api):
     - Limits maximum amount of similar pokemon
   """
 
-  player_data = api.get_player().call()['responses']['GET_PLAYER']['player_data']
+  player_data = api.get_player()['responses']['GET_PLAYER']['player_data']
 
   # Grab the inventory response and fill some data structures with required information
-  response = api.get_inventory().call()['responses']['GET_INVENTORY']
+  response = api.get_inventory()['responses']['GET_INVENTORY']
   inventory_items = response['inventory_delta']['inventory_items']
   caught_pokemon = defaultdict(list)
   candies = defaultdict(int)
@@ -112,9 +114,9 @@ def clean_up_inventory(api):
         # It's an egg
         pass
 
-    elif 'pokemon_family' in data:
+    elif 'candy' in data:
       # Is candy
-      family = data['pokemon_family']
+      family = data['candy']
       candies[family['family_id']] += family.get('candy', 0)
 
     elif 'item' in data:
@@ -174,7 +176,7 @@ def clean_up_inventory(api):
         if candy_req > candies[family_id]: break
         to_evolve.add(pokemon['id'])
         candies[family_id] -= candy_req
-  
+
   # Count pending evolutions per pokemon type
   evolution_counts = defaultdict(int)
   for id in to_evolve:
@@ -201,7 +203,7 @@ def clean_up_inventory(api):
         while discard_count > 0:
           current_count = min(discard_count, item_counts[item_id])
           api.log.info('Discarding %s of item %s' % (current_count, item_id))
-          api.recycle_inventory_item(item_id=item_id, count=current_count).call()
+          if not CONFIG.DRY_RUN: api.recycle_inventory_item(item_id=item_id, count=current_count)
           discard_count -= current_count
           item_id += 1
 
@@ -209,9 +211,10 @@ def clean_up_inventory(api):
   # Assign favourites accordingly
   if CONFIG.ENABLE_STAR_EVOLUTIONS:
     for id, pokemon in pokemon_by_id.iteritems():
-      if (id in to_evolve) != ('favorite' in pokemon):
-        api.log.info('Starring %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
-        api.set_favorite_pokemon(pokemon_id=id, is_favorite=(id in to_evolve)).call()
+      should_evolve = (id in to_evolve)
+      if should_evolve != ('favorite' in pokemon):
+        api.log.info('Favourite = %s, %s (CP %s)' % (should_evolve, pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
+        if not CONFIG.DRY_RUN: api.set_favorite_pokemon(pokemon_id=id, is_favorite=should_evolve)
 
   if CONFIG.ENABLE_TRANSFER_POKEMON:
     # Turn low CP pokemon into candy, and keep no more than MAX_SIMILAR_POKEMON of each type
@@ -226,7 +229,7 @@ def clean_up_inventory(api):
         if pokemon['id'] in to_evolve or index < min_pokemon: continue
         if pokemon['cp'] < cp_threshold or index >= max_pokemon:
           api.log.info('Grinding up %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
-          api.release_pokemon(pokemon_id=pokemon['id']).call()
+          if not CONFIG.DRY_RUN: api.release_pokemon(pokemon_id=pokemon['id'])
 
   
 if __name__ == '__main__':

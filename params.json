@@ -1,4 +1,6 @@
 {
+  "DRY_RUN": false,
+  "STARTING_POSITION": [ -33.86, 151.19, 0 ],
   "ENABLE_STAR_EVOLUTIONS": true,
   "ENABLE_TRANSFER_POKEMON": true,
   "ENABLE_DISCARD_ITEMS": true,
