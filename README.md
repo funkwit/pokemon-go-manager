@@ -29,7 +29,7 @@ Niantic may ban you. I haven't been banned yet, but you never know.
 
 ## Instructions
 
-Prerequisites: `python2.7`, `pip`
+Prerequisites: `python2.7`, `pip`, `python2.7-dev`
 
 1. `git clone https://github.com/LukeGT/pokemon-go-manager`
 2. `cd pokemon-go-manager`
