@@ -203,7 +203,9 @@ def clean_up_inventory(api):
         while discard_count > 0:
           current_count = min(discard_count, item_counts[item_id])
           api.log.info('Discarding %s of item %s' % (current_count, item_id))
-          if not CONFIG.DRY_RUN: api.recycle_inventory_item(item_id=item_id, count=current_count)
+          if not CONFIG.DRY_RUN:
+            api.recycle_inventory_item(item_id=item_id, count=current_count)
+            sleep(2)
           discard_count -= current_count
           item_id += 1
 
@@ -214,7 +216,9 @@ def clean_up_inventory(api):
       should_evolve = (id in to_evolve)
       if should_evolve != ('favorite' in pokemon):
         api.log.info('Favourite = %s, %s (CP %s)' % (should_evolve, pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
-        if not CONFIG.DRY_RUN: api.set_favorite_pokemon(pokemon_id=id, is_favorite=should_evolve)
+        if not CONFIG.DRY_RUN:
+          api.set_favorite_pokemon(pokemon_id=id, is_favorite=should_evolve)
+          sleep(2)
 
   if CONFIG.ENABLE_TRANSFER_POKEMON:
     # Turn low CP pokemon into candy, and keep no more than MAX_SIMILAR_POKEMON of each type
@@ -229,7 +233,9 @@ def clean_up_inventory(api):
         if pokemon['id'] in to_evolve or index < min_pokemon: continue
         if pokemon['cp'] < cp_threshold or index >= max_pokemon:
           api.log.info('Grinding up %s (CP %s)' % (pokemon_names[pokemon['pokemon_id']], pokemon['cp']))
-          if not CONFIG.DRY_RUN: api.release_pokemon(pokemon_id=pokemon['id'])
+          if not CONFIG.DRY_RUN:
+            api.release_pokemon(pokemon_id=pokemon['id'])
+            sleep(2)
 
   
 if __name__ == '__main__':
